@@ -39,17 +39,21 @@ architecture RTL of AES is
 
   signal sl_valid_conv       : std_logic := '0';
   signal sl_valid_cipher_out : std_logic := '0';
+  signal sl_valid_inverse_cipher_out : std_logic := '0';
   signal slv_data_out        : std_logic_vector(G_BITWIDTH_IF - 1 downto 0) := (others => '0');
   signal a_data_conv         : st_state;
   signal a_iv_conv           : st_state;
   signal a_data_cipher_in    : st_state;
   signal a_data_cipher_out   : st_state;
+  signal a_data_inverse_cipher_out   : st_state;
   signal a_data_out          : st_state;
 
   signal a_key_cipher_in     : t_key(0 to C_KEY_WORDS - 1) := (others => (others => (others => '0')));
   signal a_key_conv          : t_key(0 to C_KEY_WORDS - 1) := (others => (others => (others => '0')));
 
   signal sl_new_key_iv       : std_logic := '0';
+  
+  signal a_subkeys_array	  : t_key_expansion_array;
 
 begin
 
@@ -66,11 +70,26 @@ begin
       isl_new_key_iv => isl_new_key_iv,
       oa_iv          => a_iv_conv,
       oa_key         => a_key_conv,
+		oa_subkeys		=> a_subkeys_array,
       oa_data        => a_data_conv,
       osl_valid      => sl_valid_conv
     );
-
+	 
   i_cipher : entity aes_lib.CIPHER
+    generic map (
+      G_KEY_WORDS => C_KEY_WORDS
+    )
+    port map (
+      isl_clk   					=> isl_clk,
+      isl_valid 					=> sl_valid_conv,
+      ia_data   					=> a_data_cipher_in,
+      ia_key    					=> a_key_cipher_in,
+		ia_key_expansion_array 	=> a_subkeys_array,
+      oa_data   					=> a_data_cipher_out,
+      osl_valid 					=> sl_valid_cipher_out
+    );
+	 
+  i_inverse_cipher : entity aes_lib.INVERSE_CIPHER
     generic map (
       G_KEY_WORDS => C_KEY_WORDS
     )
@@ -79,8 +98,9 @@ begin
       isl_valid => sl_valid_conv,
       ia_data   => a_data_cipher_in,
       ia_key    => a_key_cipher_in,
-      oa_data   => a_data_cipher_out,
-      osl_valid => sl_valid_cipher_out
+		ia_key_expansion_array 	=> a_subkeys_array,
+      oa_data   => a_data_inverse_cipher_out,
+      osl_valid => sl_valid_inverse_cipher_out
     );
 
   i_output_conversion : entity aes_lib.OUTPUT_CONVERSION

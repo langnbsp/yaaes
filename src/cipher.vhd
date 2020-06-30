@@ -12,12 +12,13 @@ entity CIPHER is
     G_KEY_WORDS : integer := 4
   );
   port (
-    isl_clk   : in    std_logic;
-    isl_valid : in    std_logic;
-    ia_data   : in    st_state;
-    ia_key    : in    t_key(0 to G_KEY_WORDS - 1);
-    oa_data   : out   st_state;
-    osl_valid : out   std_logic
+    isl_clk   					: in    std_logic;
+    isl_valid 					: in    std_logic;
+    ia_data   					: in    st_state;
+    ia_key    					: in    t_key(0 to G_KEY_WORDS - 1);
+	 ia_key_expansion_array : in 	  t_key_expansion_array;
+    oa_data   					: out   st_state;
+    osl_valid 					: out   std_logic
   );
 end entity CIPHER;
 
@@ -38,26 +39,13 @@ architecture RTL of CIPHER is
   signal a_data_srows  : st_state;
 
   -- keys
-  signal a_round_keys  : st_state;
   signal int_round_cnt : integer range 0 to 13 := 0;
 
 begin
 
   sl_next_round <= slv_stage(2) and not sl_last_round;
 
-  i_key_expansion : entity aes_lib.KEY_EXPANSION
-    generic map (
-      G_KEY_WORDS   => G_KEY_WORDS
-    )
-    port map (
-      isl_clk       => isl_clk,
-      isl_next_key  => sl_next_round,
-      isl_valid     => isl_valid,
-      ia_data       => ia_key,
-      oa_data       => a_round_keys
-    );
-
-  PROC_KEY_EXPANSION : process (isl_clk) is
+  PROC_CIPHER_FUNC : process (isl_clk) is
 
     variable v_new_col    : integer range 0 to C_STATE_COLS - 1;
     variable v_data_sbox  : st_state;
@@ -71,8 +59,7 @@ begin
       -- initial add key
       if (isl_valid = '1') then
         int_round_cnt <= 0;
-
-        a_data_added <= xor_array(transpose(ia_key(0 to 3)), ia_data);
+		  a_data_added <= xor_array(transpose(ia_key_expansion_array(int_round_cnt)), ia_data);
       end if;
 
       -- substitute bytes and shift rows
@@ -121,18 +108,19 @@ begin
 
         -- add key
         if (sl_last_round = '0') then
-          a_data_added <= xor_array(transpose(a_round_keys), v_data_mcols);
+			 a_data_added <= xor_array(transpose(ia_key_expansion_array(int_round_cnt)), v_data_mcols);
         else
           -- final add key
-          a_data_added  <= xor_array(transpose(a_round_keys), a_data_srows);
+			 a_data_added  <= xor_array(transpose(ia_key_expansion_array(int_round_cnt+1)), a_data_srows);
           sl_last_round <= '0';
+			 int_round_cnt <= 0;
         end if;
       end if;
 
       sl_valid_out <= sl_last_round;
     end if;
 
-  end process PROC_KEY_EXPANSION;
+  end process PROC_CIPHER_FUNC;
 
   oa_data   <= a_data_added;
   osl_valid <= sl_valid_out;
